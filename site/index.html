@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Browser Runtime</title>
+<meta name="description" content="A real Chromium browser for AI agents that acts, waits, and explains what every click caused, with evidence a person can check.">
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --panel-2: #fbfaf7; --ink: #1b1b19; --muted: #5d5c56; --line: #dcd9cf;
+    --accent: #3451d1; --accent-bg: #edf0fd; --ok: #0a7a58; --ok-bg: #e6f4ee; --warn: #b4560b; --warn-bg: #fcf0e3;
+    --bad: #b3261e; --bad-bg: #fbeceb; --violet: #6a4dbb; --violet-bg: #f1edfa;
+    --code-bg: #15161a; --code-ink: #e7e6e1; --code-muted: #8d8c86; --code-accent: #9fb2ff; --code-ok: #6fdcaf; --code-warn: #f3b07a; --code-bad: #ff8f86;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121211; --panel: #1b1b1a; --panel-2: #20201e; --ink: #ecebe6; --muted: #a6a49c; --line: #34332f;
+      --accent: #93a6ff; --accent-bg: #1c2240; --ok: #52d1a1; --ok-bg: #122c24; --warn: #f2a560; --warn-bg: #33230f;
+      --bad: #ff8f86; --bad-bg: #3a1a18; --violet: #b9a5f2; --violet-bg: #29213f; --code-bg: #0c0c0e;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121211; --panel: #1b1b1a; --panel-2: #20201e; --ink: #ecebe6; --muted: #a6a49c; --line: #34332f;
+    --accent: #93a6ff; --accent-bg: #1c2240; --ok: #52d1a1; --ok-bg: #122c24; --warn: #f2a560; --warn-bg: #33230f;
+    --bad: #ff8f86; --bad-bg: #3a1a18; --violet: #b9a5f2; --violet-bg: #29213f; --code-bg: #0c0c0e;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  section { padding: 72px 0; border-top: 1px solid var(--line); }
+  h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); margin: 0 0 10px; }
+  h3 { font-size: 19px; margin: 0 0 6px; }
+  .kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 13px; font-weight: 700; color: var(--accent); margin: 0 0 10px; }
+  .lead { font-size: 19px; color: var(--muted); max-width: 68ch; margin: 0 0 32px; }
+  code { font: 0.88em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--accent-bg); color: var(--ink); border-radius: 5px; padding: 1px 5px; }
+  pre { margin: 0; font: 13.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-x: auto; }
+
+  /* nav */
+  nav.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  nav.top .wrap { display: flex; align-items: center; gap: 20px; height: 56px; }
+  nav.top .brand { font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  nav.top .links { display: flex; gap: 18px; margin-left: auto; font-size: 15px; }
+  nav.top .links a { color: var(--muted); }
+  @media (max-width: 720px) { nav.top .links { display: none; } }
+
+  /* hero */
+  .hero { padding: 72px 0 56px; border-top: 0; }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } }
+  .hero h1 { font-size: clamp(36px, 5.4vw, 60px); margin: 0 0 18px; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p.sub { font-size: 20px; color: var(--muted); margin: 0 0 26px; max-width: 34em; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
+  .badge { font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 11px; color: var(--muted); }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-block; font-weight: 700; font-size: 15px; padding: 11px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  :root[data-theme="dark"] .btn.primary { color: #111; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #111; } }
+  .btn:hover { text-decoration: none; filter: brightness(1.05); }
+
+  /* terminal */
+  .term { background: var(--code-bg); color: var(--code-ink); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; border: 1px solid #2a2a2e; }
+  .term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #26262a; font: 12px ui-monospace, Menlo, monospace; color: var(--code-muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #3a3a3f; }
+  .term-bar span.t { margin-left: 8px; }
+  .term pre { padding: 16px 18px 18px; }
+  .c-acc { color: var(--code-accent); } .c-ok { color: var(--code-ok); } .c-warn { color: var(--code-warn); } .c-bad { color: var(--code-bad); } .c-mut { color: var(--code-muted); }
+  .reveal .ln { opacity: 0; transform: translateY(3px); animation: ln .35s ease forwards; display: block; }
+  @keyframes ln { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .reveal .ln { animation: none; opacity: 1; transform: none; } }
+
+  /* why */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+  .col { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+  .col h3 { display: flex; align-items: center; gap: 8px; }
+  .col ul { margin: 12px 0 0; padding: 0; list-style: none; }
+  .col li { padding: 9px 0 9px 28px; border-top: 1px solid var(--line); position: relative; }
+  .col li:first-child { border-top: 0; }
+  .col.without li::before { content: "✕"; position: absolute; left: 4px; color: var(--bad); font-weight: 700; }
+  .col.with li::before { content: "✓"; position: absolute; left: 4px; color: var(--ok); font-weight: 700; }
+  .col.with { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+
+  /* how */
+  .diagram { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .diagram svg text { font-family: inherit; fill: var(--ink); }
+  .diagram svg .m { fill: var(--muted); }
+  .rule { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 760px) { .rule { grid-template-columns: 1fr; } }
+  .rule div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .rule b { display: block; margin-bottom: 4px; }
+  .loop { display: flex; flex-wrap: wrap; gap: 8px; margin: 26px 0 0; counter-reset: s; }
+  .loop div { flex: 1 1 170px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; counter-increment: s; font-size: 15px; }
+  .loop div::before { content: counter(s); display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; margin-right: 8px; }
+  .loop b { font-size: 16px; }
+
+  /* cdp */
+  .cdp-grid { display: grid; grid-template-columns: 1fr 1.25fr; gap: 24px; align-items: start; }
+  @media (max-width: 900px) { .cdp-grid { grid-template-columns: 1fr; } }
+  .explain { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+  .explain p { margin: 0 0 12px; } .explain p:last-child { margin: 0; }
+  .explain .analogy { background: var(--accent-bg); border-radius: 10px; padding: 12px 14px; font-size: 16px; }
+  .vs td:nth-child(2) { color: var(--muted); }
+  .vs td.w { white-space: normal; min-width: 0; } .vs th { white-space: normal; } .vs table { table-layout: fixed; } .vs td:first-child { width: 36%; }
+  .vs .yes { color: var(--ok); font-weight: 700; } .vs .part { color: var(--warn); font-weight: 700; } .vs .no { color: var(--bad); font-weight: 700; }
+
+  /* features */
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .feature { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+  .feature .icon { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 12px; }
+  .feature .icon svg { width: 22px; height: 22px; }
+  .feature p { color: var(--muted); margin: 0 0 12px; font-size: 16px; }
+  .feature .tool { margin-top: auto; font-size: 13px; color: var(--muted); }
+  .snip { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; }
+  .snip pre { font-size: 12.5px; }
+  .i-a { background: var(--accent-bg); color: var(--accent); } .i-o { background: var(--ok-bg); color: var(--ok); }
+  .i-w { background: var(--warn-bg); color: var(--warn); } .i-b { background: var(--bad-bg); color: var(--bad); } .i-v { background: var(--violet-bg); color: var(--violet); }
+
+  /* uses */
+  .uses { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .use { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 16px 18px; }
+  .use b { display: block; margin-bottom: 4px; } .use span { color: var(--muted); font-size: 16px; }
+
+  /* results */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+  .stat .n { font-size: 42px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .n.good { color: var(--ok); } .stat .n.warn { color: var(--warn); }
+  .stat p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+  .table { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.w { white-space: normal; min-width: 240px; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: 0; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .down { color: var(--ok); font-weight: 700; }
+  .note { color: var(--muted); font-size: 14px; margin-top: 12px; }
+
+  /* start */
+  .start { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .start { grid-template-columns: 1fr; } }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .step .term { margin-top: 12px; box-shadow: none; }
+  .step .term pre { font-size: 12.5px; padding: 12px 14px; white-space: pre-wrap; }
+  .tools { columns: 3 220px; column-gap: 24px; margin: 0; padding: 0; list-style: none; font-size: 15px; }
+  .tools li { break-inside: avoid; padding: 5px 0; color: var(--muted); }
+  .tools code { margin-right: 6px; }
+  footer { padding: 40px 0 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="#top"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/><path d="m9 14 2 2 4-4" stroke="var(--ok)"/></svg>Agent Browser Runtime</a>
+  <div class="links"><a href="#why">Why</a><a href="#how">How it works</a><a href="#cdp">Why CDP</a><a href="#features">Capabilities</a><a href="#uses">Use cases</a><a href="#results">Results</a><a href="#start">Get started</a></div>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap hero-grid">
+  <div>
+    <p class="kicker">Open-source MCP server for AI agents</p>
+    <h1>A browser your agent can <em>reason about</em>.</h1>
+    <p class="sub">A real Chromium browser for Claude and other agents. It clicks, waits until the page is actually ready, and
+      tells the agent exactly what every action caused, with evidence a person can check.</p>
+    <div class="badges"><span class="badge">MCP · Claude Code</span><span class="badge">Claude Agent SDK</span><span class="badge">Playwright + Chrome DevTools Protocol</span><span class="badge">MIT</span></div>
+    <div class="cta"><a class="btn primary" href="#start">Get started in 2 minutes</a><a class="btn" href="#how">See how it works</a></div>
+  </div>
+  <div class="term" aria-label="Example: explaining what a click caused">
+    <div class="term-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="t">browser_explain_action { actionId: 7 }</span></div>
+<pre class="reveal"><span class="ln" style="animation-delay:.1s"><span class="c-acc">click</span> button "Add to cart" <span class="c-mut">(action 7) → /inventory, settled after 516 ms</span></span><span class="ln" style="animation-delay:.45s"> └─ <span class="c-acc">POST</span> /api/cart → <span class="c-bad">500</span> <span class="c-mut">[request-12]</span></span><span class="ln" style="animation-delay:.8s">     │ <span class="c-mut">started by</span> cart.js:142:9 <span class="c-ok">(addToCart)</span></span><span class="ln" style="animation-delay:1.1s">     │   <span class="c-mut">← setTimeout ←</span> cart.js:88:3 <span class="c-ok">(onAddClick)</span></span><span class="ln" style="animation-delay:1.4s">     │ <span class="c-mut">body</span> {"error":"inventory service unavailable"}</span><span class="ln" style="animation-delay:1.75s">     └─ <span class="c-bad">uncaught TypeError:</span> cart.items is undefined</span><span class="ln" style="animation-delay:2.05s">          <span class="c-mut">at</span> cart.js:150:21 <span class="c-ok">(renderCart)</span></span><span class="ln" style="animation-delay:2.45s"> </span><span class="ln" style="animation-delay:2.6s"><span class="c-warn">The user saw nothing. The agent now knows why.</span></span></pre>
+  </div>
+</div></header>
+
+<section id="why"><div class="wrap">
+  <p class="kicker">Why this exists</p>
+  <h2>Browser agents see pixels. Bugs live underneath.</h2>
+  <p class="lead">Most browser agents take a screenshot, guess, and click. When a button silently fails, they report
+    "it didn't work" and stop. A human engineer would open DevTools. This runtime gives the agent DevTools, organised so
+    it can reason about cause and effect, and hands a person the evidence.</p>
+  <div class="compare">
+    <div class="col without"><h3>A typical browser agent</h3><ul>
+      <li>Sleeps a fixed time and hopes the page finished loading</li>
+      <li>Rereads the whole page after every step to spot a change</li>
+      <li>Sees "nothing happened" when a click throws a silent error</li>
+      <li>Cannot test what happens when the backend fails</li>
+      <li>Loops or times out on a CAPTCHA</li>
+      <li>Leaves a chat transcript, not something a team can use</li>
+    </ul></div>
+    <div class="col with"><h3>With Agent Browser Runtime</h3><ul>
+      <li>Waits until the DOM is stable and the network is quiet</li>
+      <li>Gets a short diff: "button now disabled", "dialog opened"</li>
+      <li>Asks what a click caused and gets the request, script line and error</li>
+      <li>Breaks one API on purpose and checks the error state</li>
+      <li>Stops, alerts a person, and waits for them to clear it</li>
+      <li>Leaves an HTML report, a Playwright test and a GitHub issue draft</li>
+    </ul></div>
+  </div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <p class="kicker">How it works</p>
+  <h2>The agent decides. The runtime handles the browser.</h2>
+  <p class="lead">One rule keeps it reliable: the agent chooses what to do next; the runtime owns the browser mechanics
+    (waiting, evidence, safety, cleanup). Playwright performs actions. The Chrome DevTools Protocol watches everything the page does.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 1060 470" role="img" aria-labelledby="dt dd">
+      <title id="dt">Architecture</title>
+      <desc id="dd">An AI agent calls tools over MCP. BrowserSession acts in Chromium with Playwright, observes it over CDP, records a journal tagged by action, and writes reports and tests to a run folder.</desc>
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+      <rect x="16" y="120" width="190" height="210" rx="16" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="111" y="156" text-anchor="middle" font-size="19" font-weight="700">AI agent</text>
+      <text x="111" y="180" text-anchor="middle" font-size="13" class="m">Claude Code, or your</text>
+      <text x="111" y="197" text-anchor="middle" font-size="13" class="m">Agent SDK app</text>
+      <text x="111" y="236" text-anchor="middle" font-size="14">plans the test</text>
+      <text x="111" y="258" text-anchor="middle" font-size="14">chooses each step</text>
+      <text x="111" y="280" text-anchor="middle" font-size="14">owns the verdict</text>
+      <line x1="208" y1="200" x2="282" y2="200" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="245" y="188" text-anchor="middle" font-size="12" class="m">tool call</text>
+      <line x1="282" y1="258" x2="208" y2="258" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="245" y="278" text-anchor="middle" font-size="12" class="m">receipt</text>
+      <rect x="284" y="24" width="500" height="410" rx="18" fill="var(--ok-bg)" stroke="var(--ok)" stroke-width="2"/>
+      <text x="534" y="56" text-anchor="middle" font-size="19" font-weight="700">BrowserSession</text>
+      <text x="534" y="77" text-anchor="middle" font-size="13" class="m">one deep module · both MCP adapters share its tools</text>
+      <g font-size="14">
+        <rect x="306" y="96" width="222" height="68" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="320" y="122" font-weight="700">Act + settle</text><text x="320" y="144" font-size="12.5" class="m">locators, DOM + network quiet</text>
+        <rect x="540" y="96" width="222" height="68" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="554" y="122" font-weight="700">Evidence journal</text><text x="554" y="144" font-size="12.5" class="m">every event tagged with its action</text>
+        <rect x="306" y="176" width="222" height="68" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="320" y="202" font-weight="700">Snapshot diffs</text><text x="320" y="224" font-size="12.5" class="m">what changed on the page</text>
+        <rect x="540" y="176" width="222" height="68" rx="12" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/>
+        <text x="554" y="202" font-weight="700">Action causality</text><text x="554" y="224" font-size="12.5" class="m">click → request → script → error</text>
+        <rect x="306" y="256" width="222" height="68" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="320" y="282" font-weight="700">Network faults</text><text x="320" y="304" font-size="12.5" class="m">fail, delay, rewrite on purpose</text>
+        <rect x="540" y="256" width="222" height="68" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="554" y="282" font-weight="700">Human checks</text><text x="554" y="304" font-size="12.5" class="m">CAPTCHA, 2FA, handoff, alerts</text>
+        <rect x="306" y="336" width="456" height="68" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="320" y="362" font-weight="700">Report + test export + redaction</text><text x="320" y="384" font-size="12.5" class="m">report.html · Playwright spec + HAR · secrets never reach the model</text>
+      </g>
+      <line x1="786" y1="170" x2="858" y2="170" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="822" y="158" text-anchor="middle" font-size="12" class="m">Playwright: act</text>
+      <line x1="858" y1="252" x2="786" y2="252" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="822" y="272" text-anchor="middle" font-size="12" class="m">CDP: observe</text>
+      <rect x="860" y="100" width="184" height="230" rx="16" fill="var(--warn-bg)" stroke="var(--warn)" stroke-width="2"/>
+      <text x="952" y="136" text-anchor="middle" font-size="19" font-weight="700">Chromium</text>
+      <text x="952" y="160" text-anchor="middle" font-size="13" class="m">bundled, headed or</text>
+      <text x="952" y="177" text-anchor="middle" font-size="13" class="m">headless</text>
+      <text x="952" y="222" text-anchor="middle" font-size="14">requests, bodies,</text>
+      <text x="952" y="243" text-anchor="middle" font-size="14">console, exceptions,</text>
+      <text x="952" y="264" text-anchor="middle" font-size="14">frames, initiators</text>
+      <line x1="534" y1="436" x2="534" y2="452" stroke="var(--muted)" stroke-width="2"/>
+      <text x="534" y="466" text-anchor="middle" font-size="13" class="m">artifacts/2026-09-23_18-56-24_example.com_e88d1cc4/ → report.html · evidence.json · screenshots · test.spec.ts</text>
+    </svg>
+  </div>
+  <div class="loop" aria-label="One action, end to end">
+    <div><b>Act.</b> The agent calls <code>browser_click</code> by visible name. The runtime starts action N.</div>
+    <div><b>Wait.</b> It waits until the DOM stops changing and the network goes quiet.</div>
+    <div><b>Watch.</b> CDP records requests, bodies, console calls and exceptions, each tagged with N.</div>
+    <div><b>Explain.</b> The agent asks what N caused and gets a tree, or a diff of what changed.</div>
+  </div>
+  <div class="rule">
+    <div><b>The agent owns decisions</b>Where to go, what to click, and whether the test passed.</div>
+    <div><b>The runtime owns mechanics</b>Waiting, evidence, redaction, screenshots, cleanup.</div>
+    <div><b>People own the risky parts</b>Challenges and two-factor steps pause for a person.</div>
+  </div>
+</div></section>
+
+<section id="cdp"><div class="wrap">
+  <p class="kicker">Playwright + CDP</p>
+  <h2>Why not just Playwright and an agent?</h2>
+  <p class="lead">Playwright is excellent at doing things in a browser. But when a test fails, the answer is usually in
+    what the browser saw, not in what the agent clicked. That is what CDP adds.</p>
+  <div class="cdp-grid">
+    <div class="explain">
+      <h3>What is CDP?</h3>
+      <p>The <b>Chrome DevTools Protocol</b> is the channel Chrome's own DevTools uses to talk to the browser. Every time
+        you open the Network or Console tab, DevTools is reading CDP events: each request and who started it, response
+        bodies, console calls with stack traces, uncaught exceptions, frames, and browser warnings.</p>
+      <p class="analogy">Playwright is the hands: it finds the button and clicks it reliably. CDP is the flight recorder:
+        it writes down everything the page did afterwards, and why.</p>
+      <p>This runtime uses both. Playwright acts, CDP observes, and every CDP event is tagged with the action that caused it,
+        so the agent can ask "what did my click do?" and get one answer instead of a pile of logs.</p>
+    </div>
+    <div class="table vs"><table>
+      <thead><tr><th>When a click silently fails…</th><th>Playwright + agent</th><th>This runtime</th></tr></thead>
+      <tbody>
+        <tr><td class="w">Know the page is really ready</td><td class="w"><span class="part">Partly</span> · load events or fixed waits</td><td class="w"><span class="yes">Yes</span> · DOM stable and network quiet</td></tr>
+        <tr><td class="w">See which request failed and its body</td><td class="w"><span class="part">Partly</span> · if you wire up listeners</td><td class="w"><span class="yes">Yes</span> · bounded, redacted, by request ID</td></tr>
+        <tr><td class="w">Know which script line started a request</td><td class="w"><span class="no">No</span></td><td class="w"><span class="yes">Yes</span> · CDP initiator with file:line:column</td></tr>
+        <tr><td class="w">Follow a timer or promise back to the click handler</td><td class="w"><span class="no">No</span></td><td class="w"><span class="yes">Yes</span> · async stack traces</td></tr>
+        <tr><td class="w">Tie a console error to the action that caused it</td><td class="w"><span class="no">No</span> · a flat log</td><td class="w"><span class="yes">Yes</span> · every event tagged with its action</td></tr>
+        <tr><td class="w">Spot a CAPTCHA frame before the agent gets stuck</td><td class="w"><span class="no">No</span></td><td class="w"><span class="yes">Yes</span> · frame and header detection</td></tr>
+        <tr><td class="w">Report it in a way a developer can act on</td><td class="w"><span class="no">No</span> · a chat transcript</td><td class="w"><span class="yes">Yes</span> · report.html, GitHub issue, Playwright test</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <p class="note">"Playwright + agent" means an agent driving the browser with clicks and snapshots only. Playwright itself can expose some of this data with extra code; this runtime does that work once, bounds it, redacts secrets, and links it to actions.</p>
+</div></section>
+
+<section id="features"><div class="wrap">
+  <p class="kicker">Capabilities</p>
+  <h2>What an engineer does in DevTools, as tools an agent can call.</h2>
+  <p class="lead">Each capability is a normal MCP tool with the same schema in Claude Code and the Agent SDK.</p>
+  <div class="features">
+    <article class="feature">
+      <div class="icon i-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h6v4H4zM14 15h6v4h-6zM7 9v4a2 2 0 0 0 2 2h5"/></svg></div>
+      <h3>What did this click cause?</h3>
+      <p>A cause-and-effect tree per action: the requests it started, the script line and function behind each, and the errors that followed, even across timers and promises.</p>
+      <div class="tool"><code>browser_explain_action</code></div>
+    </article>
+    <article class="feature">
+      <div class="icon i-o"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10M4 12h16M4 17h7"/><path d="m17 5 3 2-3 2"/></svg></div>
+      <h3>What changed on the page?</h3>
+      <div class="snip"><pre><span class="c-bad">removed</span> checkbox "A checkbox"
+<span class="c-warn">changed</span> textbox "Note": now enabled
+<span class="c-ok">added</span> dialog "Sign in"</pre></div>
+      <p>Diffs of the accessibility tree instead of rereading the whole page; under 5% of a full snapshot in our tests.</p>
+      <div class="tool"><code>browser_changes</code></div>
+    </article>
+    <article class="feature">
+      <div class="icon i-b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v4M12 17v4M4 12h4M16 12h4"/><circle cx="12" cy="12" r="3"/><path d="m5 5 2 2M17 17l2 2"/></svg></div>
+      <h3>Break it on purpose</h3>
+      <p>Make one API return 500, fail, slow down or return rewritten JSON, inside this browser only. Evidence labels every injected response, so "we broke it" never looks like "the server broke".</p>
+      <div class="tool"><code>browser_fault</code> · <code>browser_faults_clear</code></div>
+    </article>
+    <article class="feature">
+      <div class="icon i-v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h3"/></svg></div>
+      <h3>A report people can read</h3>
+      <p><code>report.html</code> in every run folder: the goal, findings by severity, first-party bugs separate from ad noise, a copy-ready GitHub issue, the full action timeline and screenshots.</p>
+      <div class="tool"><code>browser_report</code></div>
+    </article>
+    <article class="feature">
+      <div class="icon i-o"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13 6l-2 12"/></svg></div>
+      <h3>From exploration to regression test</h3>
+      <p>Export the session as a Playwright <code>.spec.ts</code>. Verified checks become <code>expect()</code> assertions, passwords never leave, and a HAR replays recorded API responses.</p>
+      <div class="tool"><code>browser_export_test</code></div>
+    </article>
+    <article class="feature">
+      <div class="icon i-w"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="M12 9v4M12 16h.01"/></svg></div>
+      <h3>Knows when to stop</h3>
+      <p>Detects reCAPTCHA, hCaptcha, Turnstile, Cloudflare challenges and two-factor prompts. It never solves them: it alerts a person (MCP, desktop, Slack or Teams webhook) and waits for them in the visible browser.</p>
+      <div class="tool"><code>browser_request_handoff</code></div>
+    </article>
+    <article class="feature">
+      <div class="icon i-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <h3>Verified actions</h3>
+      <p>Checks that wait for an expected URL, text, value or element state with a deadline, and short sequences that stop at the first failure with partial evidence.</p>
+      <div class="tool"><code>browser_verify</code> · <code>browser_sequence</code></div>
+    </article>
+    <article class="feature">
+      <div class="icon i-v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+      <h3>Secrets stay secret</h3>
+      <p>The runtime signs in with configured accounts so the model never sees a password. Tokens, cookies and credentials are redacted from snapshots, evidence, reports and exports.</p>
+      <div class="tool"><code>browser_login</code> · redaction everywhere</div>
+    </article>
+    <article class="feature">
+      <div class="icon i-b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17 10 11 4 5M12 19h8"/></svg></div>
+      <h3>Escape hatch for experts</h3>
+      <p>Any DevTools command or event (performance metrics, coverage, audits) behind a flag. Calls are recorded and redacted; commands that close or crash the browser stay blocked.</p>
+      <div class="tool"><code>browser_cdp</code> · <code>BROWSER_RAW_CDP=1</code></div>
+    </article>
+  </div>
+</div></section>
+
+<section id="uses"><div class="wrap">
+  <p class="kicker">How it can be used</p>
+  <h2>From one prompt to a team workflow.</h2>
+  <p class="lead">Give the agent a URL and a goal. It explores on its own and returns evidence, not guesses.</p>
+  <div class="uses">
+    <div class="use"><b>Exploratory QA</b><span>"Log in, add two items, check out." Every bug comes with the click, the request and the script line.</span></div>
+    <div class="use"><b>Root-cause debugging</b><span>"Why is the cart empty?" The agent reproduces it and shows the chain from click to failing response.</span></div>
+    <div class="use"><b>Error-state testing</b><span>Break the search API and check that the user sees an error, not "no results".</span></div>
+    <div class="use"><b>Pull request previews</b><span>Walk the changed flow on a preview URL and pass only when every verified check matched.</span></div>
+    <div class="use"><b>Regression tests for free</b><span>Turn one good exploratory run into a Playwright spec you keep in CI.</span></div>
+    <div class="use"><b>Unattended runs that page a person</b><span>Nightly agents post to Slack when a CAPTCHA or 2FA prompt needs a human.</span></div>
+    <div class="use"><b>Your own agent products</b><span>Embed it in-process with the Claude Agent SDK. Your orchestrator owns the session and can salvage evidence after a timeout.</span></div>
+    <div class="use"><b>Bug reports developers act on</b><span>Hand over <code>report.html</code> and a GitHub issue draft with steps, expected, actual and evidence.</span></div>
+  </div>
+</div></section>
+
+<section id="results"><div class="wrap">
+  <p class="kicker">Measured, not claimed</p>
+  <h2>Same prompt, fresh agent, before and after.</h2>
+  <p class="lead">Benchmarks on public automation-practice sites. Each run is a fresh Claude session with only the browser tools and a visible browser.</p>
+  <div class="stats">
+    <div class="stat"><div class="n good">−72%</div><p>cost to root-cause a broken page (S3), with the same findings and 44 → 26 tool calls</p></div>
+    <div class="stat"><div class="n good">8 / 8</div><p>silent failures traced to the click, bundle line and column (S2), at 29% lower cost</p></div>
+    <div class="stat"><div class="n warn">1 real bug</div><p>found with fault injection: a failed search tells users the shop has no products (S5)</p></div>
+    <div class="stat"><div class="n good">0</div><p>attempts to solve a CAPTCHA: the agent stopped, alerted, and waited for a person (S7)</p></div>
+  </div>
+  <div class="table"><table>
+    <thead><tr><th>Scenario</th><th>Before</th><th>After</th><th class="num">Cost before</th><th class="num">Cost after</th></tr></thead>
+    <tbody>
+      <tr><td>S2 · silent checkout failures</td><td class="w">8/8 root causes</td><td class="w">8/8, each with its action ID</td><td class="num">$0.84</td><td class="num"><span class="down">$0.60</span></td></tr>
+      <tr><td>S3 · errors on a broken page</td><td class="w">all errors, hit capture limits</td><td class="w">all errors, read two explanation trees</td><td class="num">$1.47</td><td class="num"><span class="down">$0.42</span></td></tr>
+      <tr><td>S5 · backend failures</td><td class="w">could not make a request fail</td><td class="w">3 of 3 error states tested; search-500 bug found</td><td class="num">n/a</td><td class="num">$0.62</td></tr>
+      <tr><td>S6 · exploration to test</td><td class="w">no export</td><td class="w">Playwright spec with assertions</td><td class="num">n/a</td><td class="num">$0.53</td></tr>
+      <tr><td>S7 · CAPTCHA page</td><td class="w">no challenge signal</td><td class="w">challenge_detected, screenshot, handoff</td><td class="num">$0.05</td><td class="num">$0.04</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">One run per row on 2026-09-23 with Claude Opus; expect some run-to-run variation. Sites: Sauce Demo, Practice Expand Testing, Toolshop, Google reCAPTCHA demo.</p>
+</div></section>
+
+<section id="start"><div class="wrap">
+  <p class="kicker">Get started</p>
+  <h2>Two minutes to a browser-capable Claude.</h2>
+  <div class="start">
+    <div class="step"><h3>1 · Install</h3><p class="note" style="margin:0">Chromium downloads into the package, so there is no separate browser setup.</p>
+      <div class="term"><pre>git clone &lt;this repo&gt;
+cd agent-browser-runtime
+pnpm install &amp;&amp; pnpm build</pre></div></div>
+    <div class="step"><h3>2 · Connect Claude Code</h3><p class="note" style="margin:0">Headed mode lets you watch, and step in when a challenge appears.</p>
+      <div class="term"><pre>claude mcp add agent-browser -e HEADED=1 \
+  -- node "$(pwd)/dist/adapters/mcp-server.js"</pre></div></div>
+    <div class="step"><h3>3 · Ask for a QA pass</h3><p class="note" style="margin:0">Type a short request, or start with this one.</p>
+      <div class="term"><pre>Use agent-browser to test https://www.saucedemo.com
+as problem_user / secret_sauce. Report every bug
+with evidence, then call browser_report.</pre></div></div>
+  </div>
+  <h3 style="margin:40px 0 12px">All tools</h3>
+  <ul class="tools">
+    <li><code>browser_navigate</code>open and settle</li><li><code>browser_snapshot</code>accessibility tree</li>
+    <li><code>browser_changes</code>what changed</li><li><code>browser_click</code>by visible name</li>
+    <li><code>browser_type</code>fill a field</li><li><code>browser_press</code>keyboard</li>
+    <li><code>browser_hover</code>hover</li><li><code>browser_dismiss_overlay</code>banners, modals</li>
+    <li><code>browser_wait_for_settled</code>wait correctly</li><li><code>browser_verify</code>expected state</li>
+    <li><code>browser_sequence</code>steps with one deadline</li><li><code>browser_explain_action</code>cause and effect</li>
+    <li><code>browser_evidence</code>errors and requests</li><li><code>browser_requests</code>request list</li>
+    <li><code>browser_request</code>one request</li><li><code>browser_response_body</code>bodies</li>
+    <li><code>browser_inspect</code>DOM and CSS</li><li><code>browser_frames</code>frames</li>
+    <li><code>browser_viewport</code>responsive</li><li><code>browser_screenshot</code>evidence images</li>
+    <li><code>browser_fault</code>break a request</li><li><code>browser_faults_clear</code>restore</li>
+    <li><code>browser_request_handoff</code>wait for a person</li><li><code>browser_login</code>secret-safe sign-in</li>
+    <li><code>browser_report</code>report.html</li><li><code>browser_export_test</code>Playwright spec</li>
+    <li><code>browser_close</code>save and clean up</li><li><code>browser_cdp</code>advanced, flagged</li>
+  </ul>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Agent Browser Runtime · MIT License</span>
+  <span>No stealth patches. No CAPTCHA solving. Run it only on sites you are allowed to test.</span>
+</div></footer>
+</body>
+</html>

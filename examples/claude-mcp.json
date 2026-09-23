@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agent-browser": {
+      "command": "node",
+      "args": ["/absolute/path/to/agent-browser-runtime/dist/adapters/mcp-server.js"]
+    }
+  }
+}

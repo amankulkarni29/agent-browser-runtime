@@ -1,0 +1,13 @@
+node_modules/
+dist/
+artifacts/
+coverage/
+.browsers/
+.env
+*.log
+.tmp-test-export/
+docs/
+PENDING_TASKS.md
+.claude/settings.local.json
+.DS_Store
+test-results/
