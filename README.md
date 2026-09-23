@@ -13,7 +13,7 @@ evidence through the Chrome DevTools Protocol (CDP), screenshots, and cleanup.
 - **Evidence, not only actions.** Every action returns a bookmark. Ask for the network responses,
   response bodies, console messages, page errors, and CDP events captured after that bookmark.
 
-Overview page: [site/index.html](site/index.html) (why it exists, how it works, use cases, results).
+Overview page: [amankulkarni29.github.io/agent-browser-runtime](https://amankulkarni29.github.io/agent-browser-runtime/) (why it exists, how it works, use cases, results).
 
 ## How it works
 
