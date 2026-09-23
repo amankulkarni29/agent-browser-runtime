@@ -18,34 +18,26 @@ Overview page: [amankulkarni29.github.io/agent-browser-runtime](https://amankulk
 ## How it works
 
 ```mermaid
-flowchart LR
-  subgraph Agents
-    CC["Claude Code / MCP client"]
-    SDK["Your orchestrator<br/>(Claude Agent SDK)"]
+flowchart TB
+  CC["Claude Code or any MCP client"] -- "stdio MCP" --> T
+  SDK["Your app with the Claude Agent SDK"] -- "in-process MCP" --> T
+  T["Shared tool definitions<br/>same names and schemas in both adapters"] --> S
+
+  subgraph S["BrowserSession: owns browser mechanics, evidence, safety and cleanup"]
+    direction LR
+    ACT["Act and settle<br/>click, type, navigate<br/>wait for DOM and network"]
+    OBS["Observe and record<br/>journal: every event tagged<br/>with the action that caused it"]
+    ANA["Explain<br/>action causality<br/>snapshot diffs"]
+    CTL["Control<br/>network faults<br/>human handoff"]
+    OUT["Output<br/>report.html, Playwright test,<br/>evidence.json, screenshots"]
+    OBS --> ANA
+    OBS --> OUT
   end
-  CC -- stdio MCP --> Tools
-  SDK -- in-process MCP --> Tools
-  Tools["Shared tool definitions<br/>(same names, same schemas)"] --> BS
-  subgraph Runtime["BrowserSession (owns mechanics, safety, evidence, cleanup)"]
-    BS["Actions + settle loop"]
-    J["EvidenceJournal<br/>every event tagged with its action"]
-    N["NetworkRecorder<br/>requests, bodies, initiators"]
-    C["action-causality<br/>what did this click cause?"]
-    D["snapshot-diff<br/>what changed on the page?"]
-    F["network-faults<br/>break requests on purpose"]
-    H["human-checks<br/>CAPTCHA, 2FA, handoff, notices"]
-    X["test-export + run-report<br/>spec.ts, HAR, report.html"]
-  end
-  BS -- Playwright: act --> CH[("Chromium")]
-  CH -- CDP: observe --> J
-  CH -- CDP --> N
-  J --> C
-  N --> C
-  BS --> D
-  BS --> F
-  CH --> H
-  J --> X
-  X --> A[("artifacts/&lt;date&gt;_&lt;site&gt;_&lt;run&gt;/<br/>evidence.json, report.html,<br/>screenshots, spec.ts, HAR")]
+
+  ACT -- "Playwright: act" --> B[("Chromium")]
+  B -- "CDP: requests, console,<br/>exceptions, initiators" --> OBS
+  CTL -. "fault rules, challenge checks" .-> B
+  OUT --> A[("artifacts/date_site_run/")]
 ```
 
 The agent owns the plan and the verdict. `BrowserSession` owns browser mechanics. One tool call:
@@ -224,7 +216,7 @@ The orchestrator publishes artifact links and owns the verdict.
 Requirements: Node.js 22 or later and pnpm (`corepack enable`).
 
 ```bash
-git clone <this-repo> agent-browser-runtime
+git clone https://github.com/amankulkarni29/agent-browser-runtime.git
 cd agent-browser-runtime
 pnpm install        # also downloads Chromium into .browsers/
 pnpm build
